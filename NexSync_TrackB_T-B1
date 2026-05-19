@@ -1,0 +1,294 @@
+const int nsR = 3;
+const int nsY = 2;
+const int nsG = 9;
+
+const int ewR = 6;
+const int ewY = 5;
+const int ewG = 4;
+
+const int BUTTON_NS = 7;
+const int BUTTON_EW = 8;
+
+const unsigned long GREEN_TIME = 5000;
+const unsigned long YELLOW_TIME = 2000;
+const unsigned long PED_TIME = 4000;
+
+unsigned long stateStart;
+
+bool NS_pedRequest = false;
+bool EW_pedRequest = false;
+
+bool lastNS = HIGH;
+bool lastEW = HIGH;
+
+enum State{
+  NS_GREEN,
+  NS_YELLOW,
+  EW_GREEN,
+  EW_YELLOW,
+  PED_NS_CROSS,
+  PED_EW_CROSS,
+  PED_BOTH_CROSS
+};
+
+State currentState = NS_GREEN;
+
+
+void setup(){
+
+  pinMode(nsR,OUTPUT);
+  pinMode(nsG,OUTPUT);
+  pinMode(nsY,OUTPUT);
+
+  pinMode(ewR,OUTPUT);
+  pinMode(ewG,OUTPUT);
+  pinMode(ewY,OUTPUT);
+
+  pinMode(BUTTON_NS,INPUT_PULLUP);
+  pinMode(BUTTON_EW,INPUT_PULLUP);
+
+  Serial.begin(9600);
+
+  stateStart = millis();
+
+  setLights();
+}
+
+
+
+void loop(){
+
+  bool currentNS = digitalRead(BUTTON_NS);
+  bool currentEW = digitalRead(BUTTON_EW);
+
+  // Detect only new button presses
+  if(lastNS == HIGH && currentNS == LOW){
+      NS_pedRequest = true;
+      Serial.println("NS crossing requested");
+  }
+
+  if(lastEW == HIGH && currentEW == LOW){
+      EW_pedRequest = true;
+      Serial.println("EW crossing requested");
+  }
+
+  lastNS = currentNS;
+  lastEW = currentEW;
+
+  unsigned long elapsed = millis()-stateStart;
+
+
+
+  switch(currentState){
+
+    case NS_GREEN:
+
+      if(NS_pedRequest || EW_pedRequest){
+          changeState(NS_YELLOW);
+          return;
+      }
+
+      if(elapsed >= GREEN_TIME){
+          changeState(NS_YELLOW);
+          return;
+      }
+
+      break;
+
+
+
+    case NS_YELLOW:
+
+      if(elapsed >= YELLOW_TIME){
+
+          if(NS_pedRequest && EW_pedRequest){
+              changeState(PED_BOTH_CROSS);
+          }
+
+          else if(NS_pedRequest){
+              changeState(PED_NS_CROSS);
+          }
+
+          else{
+              changeState(EW_GREEN);
+          }
+
+          return;
+      }
+
+      break;
+
+
+
+    case EW_GREEN:
+
+      if(NS_pedRequest || EW_pedRequest){
+          changeState(EW_YELLOW);
+          return;
+      }
+
+      if(elapsed >= GREEN_TIME){
+          changeState(EW_YELLOW);
+          return;
+      }
+
+      break;
+
+
+
+    case EW_YELLOW:
+
+      if(elapsed >= YELLOW_TIME){
+
+          if(NS_pedRequest && EW_pedRequest){
+              changeState(PED_BOTH_CROSS);
+          }
+
+          else if(EW_pedRequest){
+              changeState(PED_EW_CROSS);
+          }
+
+          else{
+              changeState(NS_GREEN);
+          }
+
+          return;
+      }
+
+      break;
+
+
+
+    case PED_NS_CROSS:
+
+      if(elapsed >= PED_TIME){
+
+          NS_pedRequest = false;
+
+          changeState(EW_GREEN);
+          return;
+      }
+
+      break;
+
+
+
+    case PED_EW_CROSS:
+
+      if(elapsed >= PED_TIME){
+
+          EW_pedRequest = false;
+
+          changeState(NS_GREEN);
+          return;
+      }
+
+      break;
+
+
+
+    case PED_BOTH_CROSS:
+
+      if(elapsed >= PED_TIME){
+
+          NS_pedRequest = false;
+          EW_pedRequest = false;
+
+          changeState(NS_GREEN);
+          return;
+      }
+
+      break;
+  }
+}
+
+
+
+void changeState(State newState){
+  currentState = newState;
+
+    Serial.print("Current state: ");
+    Serial.println(currentState);
+
+    stateStart = millis();
+
+    setLights();
+}
+
+
+
+void setLights(){
+
+    // Turn all OFF first
+
+    digitalWrite(nsR,LOW);
+    digitalWrite(nsY,LOW);
+    digitalWrite(nsG,LOW);
+
+    digitalWrite(ewR,LOW);
+    digitalWrite(ewY,LOW);
+    digitalWrite(ewG,LOW);
+
+
+
+    switch(currentState){
+
+      case NS_GREEN:
+
+          digitalWrite(nsG,HIGH);
+          digitalWrite(ewR,HIGH);
+
+          break;
+
+
+      case NS_YELLOW:
+
+          digitalWrite(nsY,HIGH);
+          digitalWrite(ewR,HIGH);
+
+          break;
+
+
+      case EW_GREEN:
+
+          digitalWrite(ewG,HIGH);
+          digitalWrite(nsR,HIGH);
+
+          break;
+
+
+      case EW_YELLOW:
+
+          digitalWrite(ewY,HIGH);
+          digitalWrite(nsR,HIGH);
+
+          break;
+
+
+      case PED_NS_CROSS:
+
+          // Stop NS traffic only
+          digitalWrite(nsR,HIGH);
+          digitalWrite(ewG,HIGH);
+
+          break;
+
+
+      case PED_EW_CROSS:
+
+          // Stop EW traffic only
+          digitalWrite(ewR,HIGH);
+          digitalWrite(nsG,HIGH);
+
+          break;
+
+
+      case PED_BOTH_CROSS:
+
+          // Stop all traffic
+          digitalWrite(nsR,HIGH);
+          digitalWrite(ewR,HIGH);
+
+          break;
+    }
+}
